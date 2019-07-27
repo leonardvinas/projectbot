@@ -1,0 +1,68 @@
+Algorithm
+
+Step 1- basic
+
+x = buy price + buy fee
+y = current price + sell fee
+z = y - x 
+if(z < 0) //if you sell and you made a loss
+    don't sell
+else //calculate profit
+     if(z > minimum_profit)
+	sell
+
+--------------------------------
+Step 2 - using RSI
+
+
+rsi< 30 = buy with 1/5th of the total
+assign coin price as var A
+else, do nothing
+
+after 5 mins, check rsi again
+if rsi< 30 assign coin price as var b
+if var b< a, buy with with another 1/5th
+else, do nothing
+
+
+after 5 mins, check rsi again
+if rsi > 65, sell with
+((a+b)/2 * 1.03) + fee
+-----------------------------
+if market price is greater than our average, sell at market price
+
+if market price is lesser than our average, sell only if we get at least 1% profit
+
+--------------------------------
+IF - Sell order gets posted but not settled and rsi tells to buy again
+THEN - Buy only if price is lower than the lowest settled buy
+
+
+Only clear all tables if sell gets settled
+
+
+
+-------------------------------------
+Fix for buying algo
+
+If Rsi < 30
+
+If nothing on table exists (0) then buy market price
+
+if((float(currentRSIPrice + percentLessThanPrevBuy) < float(lastBuyPrice) or int(lastBuyPrice) == 0) and float(usdBalace) >= pricePerOrder)
+
+Else if Market price < Previous buy then buy market price 
+
+
+
+IF - 
+
+
+
+Future algo:
+If we need to cancel an order
+Checkbox for which indicator to use 
+Order of checks
+stop-loss = stop when price hit a certain point in a small amount of time 
+
+

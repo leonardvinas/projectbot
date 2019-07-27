@@ -1,0 +1,343 @@
+import json
+import cbpro
+import talib as ta
+import numpy as np
+import time
+import threading
+import mysql.connector;
+import datetime
+
+public_client = cbpro.PublicClient()
+auth_client = cbpro.AuthenticatedClient("2591a8263bb16777c269ea46e272c2ed","6OtvMhCrnxV2qzwVcSMmcZIJr0vDgdM+hxnOlarl4KDQC32XYqAyhFi8Ig4U/oyUylmoplpCgh/Z5CLgzZrXFw==", "ThePillowsAreGreat")
+rsi_min = 35
+rsi_max = 67
+fee = 0.0015
+profit = .02
+market = 'XRP-USD'
+orderBlock = 5;
+mydb = ''
+originalInvestment = 100 #usd
+pricePerOrder = originalInvestment/5;
+
+
+def connect_db():
+    # specify database configurations
+    global  mydb
+    mydb = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    passwd="password",
+    database="crypto"
+    )
+
+    mycursor = mydb.cursor()
+    #mycursor.execute("SELECT * FROM currentOrder")
+    #mycursor.execute("insert into currentOrder values (3,'SELL',1,245.40)")
+    #myresult = mycursor.fetchall()
+    #mydb.commit()
+    #for x in myresult:
+     #   print(x)
+
+def utc_to_local(utc_dt):
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(utc_dt))
+
+def getUsdBalance():
+    print('getting usd balance')
+    global auth_client
+    result = auth_client.get_account('6a02933a-eb92-4515-940c-57a24bf86c11')
+    if 'balance' in result.keys():
+        return result['balance']
+    else:
+        return 0;
+
+def order(orderType, amountInCoin, price, market):
+
+    if(orderType == 'buy'):
+
+        result = auth_client.buy(price=price, #USD
+               size=amountInCoin, #BTC
+               order_type='limit',
+               product_id=market)
+    elif(orderType == 'sell'):
+        result = auth_client.sell(price=price, #USD
+               size=amountInCoin, #BTC
+               order_type='limit',
+               product_id=market)
+    else:
+        print('error in order type',orderType)
+        return 0
+
+    mycursor = mydb.cursor()
+
+    if 'id' in result.keys(): ##succesfully placed an order
+        id = result['id']
+        price = result['price']
+        size = result['size']
+        paid = float(size) * float(price)
+        type = result['side']
+        time_ordered = result['created_at']
+        settled = result['settled']
+        sql = "insert into currentOrder (orderId, type, settled, price, size) values (%s,%s,%s,%s,%s)"
+        val = (id,type,settled,price,size)
+        mycursor.execute(sql,val)
+        mydb.commit()
+    else:
+        print('error in buying')
+        return 0
+
+
+def getOrderInfo(orderId):
+    result = auth_client.get_order(orderId)
+    if type(result) is dict:
+        return result;
+    else:
+        return 0
+
+def updateBuyOrders():
+    print('update buy orders')
+    sql = "select * from currentOrder where type = 'buy' and settled = 0";
+    mycursor = mydb.cursor()
+    mycursor.execute(sql)
+    result = mycursor.fetchall()
+    print('buy order list', result)
+    if(mycursor.rowcount > 0):
+        for buyOrder in result:
+            print(buyOrder)
+            orderId = buyOrder[1]
+            orderInfo = getOrderInfo(orderId)
+            print('orderinfo',orderInfo)
+            if(orderInfo != 0):
+                settled = orderInfo['settled']
+                if(settled == True): #update database
+                    sqlUpdate = "update currentOrder set settled = True where orderId = '"  + orderInfo['id'] + "'"
+                    mycursor.execute(sqlUpdate)
+                    mydb.commit()
+            else:
+                print('invalid getting order info for orderId', orderId)
+
+
+def cancelOrder(id):
+
+    result = auth_client.cancel_order(id)
+    mycursor = mydb.cursor()
+
+    if type(result) is dict:
+        print('cannot cancel an order', id)
+        return 0
+    elif(type(result) is list and result[0] == id):
+        print('succesffully cancel an order', id)
+        sql = 'delete from currentOrder where orderId = ' + "'" + id + "'"
+        mycursor.execute(sql)
+        mydb.commit()
+        return id
+
+
+def getLastBuyPrice():
+
+    sql = "select * from currentOrder where time = (select max(time) from currentOrder where settled = 1 and type = 'Buy') and type='Buy' limit 1"
+    mycursor = mydb.cursor()
+    mycursor.execute(sql)
+    myresult = mycursor.fetchall()
+
+    number_result = mycursor.rowcount
+    if(number_result > 0):
+      return float(myresult[0][3])
+    else:
+        return 0
+
+def getAvgBuyPriceAndSize():
+    sql = "select avg(price), sum(size) from currentOrder where and type = 'Buy'"
+    mycursor = mydb.cursor()
+    mycursor.execute(sql)
+    myresult = mycursor.fetchall()
+    number_result = mycursor.rowcount
+    if(number_result > 0):
+        return myresult #return buy price and size
+
+def getMarketPrice():
+
+    marketResult = auth_client.get_product_ticker(market)
+    print(marketResult)
+    if 'trade_id' in marketResult.keys():
+        return marketResult['price']
+    else:
+        print('ERROR: EMERGENCY CAN"T GET MARKETPRICE')
+        return 0
+
+def cancelAllSell():
+
+    sql = "select * from currentOrder where type = 'sell'"
+    mycursor = mydb.cursor()
+    mycursor.execute(sql)
+    result = mycursor.fetchall()
+    number_result = mycursor.rowcount
+
+    if(number_result > 0): #cancel sell
+        for sellOrder in result:
+            orderId = sellOrder[1]
+            cancelStatus = cancelOrder(orderId)
+            if(cancelStatus == 0):
+                return 0
+
+    return 1;
+
+def checkSellStatus():
+
+    sql = "select * from currentOrder where type='sell'"
+    mycursor = mydb.cursor()
+    mycursor.execute(sql)
+    result = mycursor.fetchall()
+    number_result = mycursor.rowcount
+
+    if(number_result > 0):
+        for sellOrder in result:
+            orderId = sellOrder[1]
+            orderInfo = getOrderInfo(orderId)
+            if(orderInfo != 0):
+                settled = orderInfo['settled']
+                if(settled == True): #clear table
+                    cancelAllOrders()
+                    sql = 'delete * from currentOrder';
+                    mycursor.execute(sql)
+                    mydb.commit()
+
+
+def algorithm():
+
+    globals()
+    print("begin algorithm")
+    checkSellStatus() #important, check if there's any sell, if so check if its settled and if it is, delete the whole damn table haha
+
+    currentDataJson = public_client.get_product_historic_rates(market, granularity=60)
+    data = json.loads(json.dumps(currentDataJson))
+    candles = np.array(data)
+    close_data = candles[:,4]
+    rsi_graph = ta.RSI(close_data,timeperiod=14)
+    currentRSIValue = rsi_graph[14] #latest rsi
+    currentRSIPrice = close_data[14]
+
+
+    print('currentRSIValue',currentRSIValue)
+    print('currentRSIPrice', currentRSIPrice)
+
+    if(currentRSIValue > rsi_max): #time to sell
+        updateBuyOrders()
+        status = getLastBuyPrice() #can not be a zero,
+        print('sell zone:--------')
+        print('last buy price', status)
+        if(status != 0):  #get average buy price
+            buyPriceSize = getAvgBuyPriceAndSize() #avegae is in here, also size
+            sellPrice = buyPriceSize[0]
+            sellSize = buyPriceSize[1]
+            print('sellprice and sellsize',sellPrice,sellSize)
+            minSellPrice = buyPriceSize[0] + (buyPriceSize[0] * fee) + (profit * buyPriceSize[0])
+            marketPrice = getMarketPrice()
+            if(marketPrice > 0 and marketPrice >= minSellPrice):
+                order('sell',sellSize,sellPrice,market)
+
+    elif(currentRSIValue < rsi_min): #time to buy
+        lastBuyPrice = getLastBuyPrice()
+        usdBalace = getUsdBalance()
+        print('buy zone-------')
+        print('lastBuyPrice',lastBuyPrice)
+        print('usdBalance',usdBalace)
+        print('pricePerOrderWithFee', pricePerOrder)
+        percentLessThanPrevBuy = lastBuyPrice * 0.02;
+        if((float(currentRSIPrice + percentLessThanPrevBuy) < float(lastBuyPrice) or int(lastBuyPrice) == 0) and float(usdBalace) >= pricePerOrder):
+            cancelAllSellStatus = cancelAllSell()
+            if(cancelAllSellStatus != 0): #something went wrong with canceling sell orders
+                #place a buy order
+                amountCoin = round(pricePerOrder/currentRSIPrice,2)
+                print('placed order because lastBuyPRice is less or 0 and usdBalance >, buy coin:', amountCoin)
+                buyStatus = order('buy',amountCoin,currentRSIPrice,market)
+
+    time.sleep(60)
+
+def getFilledOrder():
+
+    filledOrder = auth_client.get_fills("BCH-USD")
+
+    for order in filledOrder:
+        print(order)
+
+    return filledOrder
+
+def cancelAllOrders():
+    print('cancel all orders')
+    result = auth_client.cancel_all();
+    mycursor = mydb.cursor()
+
+    for orderId in result:
+        sql = 'delete from currentOrder where orderId = ' + "'" + orderId + "'"
+        print(sql)
+        mycursor.execute(sql)
+
+    mydb.commit()
+
+
+def main():
+
+
+    #cancelOrder('c93f2cb4-32d3-403d-8c8c-ce710471433c')
+    #retur
+    connect_db()
+    print(getUsdBalance());
+    #print(getLastBuyPrice())
+    #print('cancel all sell status', cancelAllSell())
+    #return
+    #cancelAllOrders()
+    #return
+    #getAvgBuyPrice()
+   # return
+    #cancelAllOrders()
+    #getFilledOrder()
+    #updateBuyOrders()
+
+    #cancelAllOrders();
+    #return
+    #print(getLastBuyPrice())
+    #buy('0.1','100.00','ETH-USD');
+    #getFilledOrder()
+    #threading.Timer(10.0, algorithm()).start()
+    while True:
+        #order('buy','0.1','100.00','ETH-USD')
+        algorithm()
+
+    return
+
+    public_client = cbpro.PublicClient()
+    jsonResult = public_client.get_product_historic_rates('ETH-USD', granularity=300)
+    data = json.loads(json.dumps(jsonResult))
+    print(type(data))
+    candles = np.array(data)
+    close_data = candles[:,4]
+    close_data_rev = np.flip(close_data,0)
+    #close_data_rev2 = close_data[::-1]
+    #print(close_data_rev)
+    #print(close_data_rev)
+    rsi_graph = ta.RSI(close_data,timeperiod=14);
+    rsi_graph_rev = ta.RSI(close_data_rev, timeperiod=14)
+    #plt.plot(rsi_graph)
+    #plt.show()
+
+    product_trade_history = public_client.get_product_historic_rates('ETH-USD', granularity=300)
+
+    for x,row in enumerate(candles):
+        utcTime = row[0]
+        localTime = utc_to_local(utcTime)
+        price = row[4]
+        rsi_at_time = rsi_graph[x]
+        rsi_rev_at_time = rsi_graph_rev[x]
+        print(x,'',localTime,' ',price,' ', rsi_at_time, close_data[x])
+
+
+    print(product_trade_history)
+
+    #print (rsi_graph)
+
+    #close = numpy.random.random(100)
+    #print(ta.RSI(close,2))
+
+if __name__ == "__main__":
+    main()
+

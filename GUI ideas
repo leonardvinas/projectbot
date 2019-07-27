@@ -1,0 +1,31 @@
+
+
+GUI ideas
+
+
+Variables that need to be entered:
+
+Key 
+Passphrase
+Whitelisted ip address
+Enter Total Capital investment - amount of initial money you want to put in trade
+How often is the rsi check? - every 5 mins,15 mins,  30 mins, 60 mins
+How many times do we divide the initial investment? - default 5 times - can be 2 to 10 times
+What timeline/granularity
+What % profit for selling - default 3% - from 1% to 5%
+usd/coin being traded
+
+When buying again for 1/5th - lesser than 2%
+
+
+
+
+Status monitor:
+Initial investment amount
+How much gain so far?
+Start time
+Current usd/coin being traded
+Current money in account available for trading?
+
+
+

@@ -9,6 +9,7 @@ Key
 Passphrase
 Whitelisted ip address
 Enter Total Capital investment - amount of initial money you want to put in trade
+Enter usd id
 How often is the rsi check? - every 5 mins,15 mins,  30 mins, 60 mins
 How many times do we divide the initial investment? - default 5 times - can be 2 to 10 times
 What timeline/granularity

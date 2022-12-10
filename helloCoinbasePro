@@ -8,7 +8,7 @@ import mysql.connector;
 import datetime
 
 public_client = cbpro.PublicClient()
-auth_client = cbpro.AuthenticatedClient("2591a8263bb16777c269ea46e272c2ed","6OtvMhCrnxV2qzwVcSMmcZIJr0vDgdM+hxnOlarl4KDQC32XYqAyhFi8Ig4U/oyUylmoplpCgh/Z5CLgzZrXFw==", "ThePillowsAreGreat")
+auth_client = cbpro.AuthenticatedClient("")
 rsi_min = 35
 rsi_max = 67
 fee = 0.0015

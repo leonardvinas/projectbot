@@ -44,7 +44,7 @@ def utc_to_local(utc_dt):
 def getUsdBalance():
     print('getting usd balance')
     global auth_client
-    result = auth_client.get_account('6a02933a-eb92-4515-940c-57a24bf86c11')
+    result = auth_client.get_account('')
     if 'balance' in result.keys():
         return result['balance']
     else:
